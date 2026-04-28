@@ -22,7 +22,8 @@ def get_start_of_memorization(df,
     assert approach in ["contextual_memorization", "counterfactual_memorization", "recollection_memorization"]
     if len(columns_preserve_variance) > 0:
         assert all(column in df.columns for column in columns_preserve_variance)
-    assert df[df[eval_column] == training_dataset]['token_sequence'].nunique() == 1
+    if 'token_sequence' in df.columns:
+        assert df[df[eval_column] == training_dataset]['token_sequence'].nunique() == 1
 
     
     df = df[df[eval_column].isin([training_dataset, eval_dataset])].copy()
@@ -228,6 +229,7 @@ def plot_vline_with_conflict(fig,
                              line_dash='dot', 
                              font_size=10,
                              annotation_position='top',
+                             show_annotation=True
     ):
     """
         If multiple vertical lines exist, this code is useful to plot them
@@ -240,7 +242,7 @@ def plot_vline_with_conflict(fig,
             fig.add_vline(x=epoch, 
                     line_dash=line_dash, 
                     line_color=v_line_dict[epoch][0][0],
-                    annotation_text=f"{'> ' if not memorization_has_started else ''}{int(epoch)}",
+                    annotation_text=f"{'> ' if not memorization_has_started else ''}{int(epoch)}" if show_annotation else '',
                     annotation_font=dict(
                         color='gray',
                         size=font_size,
@@ -255,7 +257,7 @@ def plot_vline_with_conflict(fig,
             fig.add_vline(x=epoch, 
                     line_dash=line_dash, 
                     line_color='rgba(255, 0, 0, 0)',
-                    annotation_text=f"{'> ' if not v_line_dict[epoch][0][1] else ''}{int(epoch)}",
+                    annotation_text=f"{'> ' if not v_line_dict[epoch][0][1] else ''}{int(epoch)}" if show_annotation else '',
                     annotation_font=dict(
                         color='gray',
                         size=font_size,
@@ -275,10 +277,11 @@ def plot_vline_with_conflict(fig,
     return fig
 
 
-
-
 # Descriminative test at the level of individual strings
 from nltk.metrics.distance import edit_distance
+from rapidfuzz.distance import Levenshtein
+from tqdm import tqdm
+import time
 def get_edit_distance(df, eval_dataset_1, eval_dataset_2):
     assert eval_dataset_1 in df['eval_dataset'].unique()
     assert eval_dataset_2 in df['eval_dataset'].unique()
@@ -287,7 +290,7 @@ def get_edit_distance(df, eval_dataset_1, eval_dataset_2):
     eval_1_to_eval_2_distance = {}
     eval_2_seq_to_sample_id = {}
     eval_1_min_distant_eval_2_sample_ids = {}
-    for eval_1_token_sequence in df[(df['eval_dataset'] == eval_dataset_1)]['token_sequence'].unique():
+    for eval_1_token_sequence in tqdm(df[(df['eval_dataset'] == eval_dataset_1)]['token_sequence'].unique()):
         for eval_2_token_sequence in df[(df['eval_dataset'] == eval_dataset_2)]['token_sequence'].unique():
             if eval_2_token_sequence not in eval_2_seq_to_sample_id:
                 test_sample_ids = tuple(set(df[(df['eval_dataset'] == eval_dataset_2) & (df['token_sequence'] == eval_2_token_sequence)]['sample_id']))
@@ -295,9 +298,9 @@ def get_edit_distance(df, eval_dataset_1, eval_dataset_2):
 
             # print(eval_1_token_sequence[:10], eval_2_token_sequence[:10])
             if (eval_1_token_sequence, eval_2_token_sequence) not in token_pair_distance:
-                # print(edit_distance(eval_1_token_sequence, eval_2_token_sequence))
-                token_pair_distance[(eval_1_token_sequence, eval_2_token_sequence)] = edit_distance(eval_1_token_sequence, eval_2_token_sequence)
+                # token_pair_distance[(eval_1_token_sequence, eval_2_token_sequence)] = edit_distance(eval_1_token_sequence, eval_2_token_sequence)
                 # token_pair_distance[(eval_1_token_sequence, eval_2_token_sequence)] = 0
+                token_pair_distance[(eval_1_token_sequence, eval_2_token_sequence)] = Levenshtein.distance(eval_1_token_sequence, eval_2_token_sequence)
 
             if eval_1_token_sequence not in eval_1_to_eval_2_distance:
                 eval_1_to_eval_2_distance[eval_1_token_sequence] = []
@@ -425,6 +428,6 @@ def compare_with_nearest_test_sequence(df_target, training_dataset="train_sequen
     df_combined = pd.concat([df_train_split, df_test_split_revised])
     for key, df_item in df_combined.groupby(['epoch', 'sample_id']):
         # print(df_item['eval_dataset'].unique())
-        assert df_item['eval_dataset'].nunique() == 2
+        assert df_item['eval_dataset'].nunique() <= 2
 
     return df_combined

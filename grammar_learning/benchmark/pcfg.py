@@ -20,42 +20,48 @@ class PCFG(nltk.grammar.PCFG):
         random.seed(seed)
         for _ in range(n):
             self.non_terminal_applied_position = {}
-            yield self._generate_derivation(self.start(), 0), self.non_terminal_applied_position
+            self.non_terminal_applied_position_reverse = {}
+            sentence, sentence_prob = self._generate_derivation(self.start(), 0)
+            if self.start() not in self.non_terminal_applied_position:
+                self.non_terminal_applied_position[self.start()] = [
+                    (0, len(sentence) - 1 , None)
+                ]
+            yield (sentence, sentence_prob), self.non_terminal_applied_position, self.non_terminal_applied_position_reverse
 
-    def prefix_conditioned_generate(self, prefix, n, cache=False,  n_max=10000, seed=None, use_tqdm=False):
-        random.seed(seed)
-        success = 0
+    # def prefix_conditioned_generate(self, prefix, n, cache=False,  n_max=10000, seed=None, use_tqdm=False):
+    #     random.seed(seed)
+    #     success = 0
 
-        if(cache):
-            # check if self._cache is initialized
-            if not hasattr(self, '_prefix_cache'):
-                self._prefix_cache = {}
-            if prefix in self._prefix_cache:
-                # print("Yielding from cache")
-                for sentence in self._prefix_cache[prefix]:
-                    yield (sentence, self._prefix_cache[prefix][sentence])
-                    success += 1
-                if(success < n):
-                    # print("Searching with no seed")
-                    random.seed(None)
+    #     if(cache):
+    #         # check if self._cache is initialized
+    #         if not hasattr(self, '_prefix_cache'):
+    #             self._prefix_cache = {}
+    #         if prefix in self._prefix_cache:
+    #             # print("Yielding from cache")
+    #             for sentence in self._prefix_cache[prefix]:
+    #                 yield (sentence, self._prefix_cache[prefix][sentence])
+    #                 success += 1
+    #             if(success < n):
+    #                 # print("Searching with no seed")
+    #                 random.seed(None)
 
         
         
-        # a naive implementation that tries to generate n sentences with the prefix by checking post generation
-        for _ in tqdm(range(n_max), disable=not use_tqdm):
-            if success >= n:
-                break
-            sentence, probability = self._generate_derivation(self.start())
-            if(cache):
-                for i in range(1, len(sentence) + 1):
-                    if sentence[:i] not in self._prefix_cache:
-                        self._prefix_cache[sentence[:i]] = {}
-                    if(sentence not in self._prefix_cache[sentence[:i]]):    
-                        self._prefix_cache[sentence[:i]][sentence] = probability
+    #     # a naive implementation that tries to generate n sentences with the prefix by checking post generation
+    #     for _ in tqdm(range(n_max), disable=not use_tqdm):
+    #         if success >= n:
+    #             break
+    #         sentence, probability = self._generate_derivation(self.start())
+    #         if(cache):
+    #             for i in range(1, len(sentence) + 1):
+    #                 if sentence[:i] not in self._prefix_cache:
+    #                     self._prefix_cache[sentence[:i]] = {}
+    #                 if(sentence not in self._prefix_cache[sentence[:i]]):    
+    #                     self._prefix_cache[sentence[:i]][sentence] = probability
 
-            if(sentence.startswith(prefix)):
-                yield (sentence, probability)
-                success += 1
+    #         if(sentence.startswith(prefix)):
+    #             yield (sentence, probability)
+    #             success += 1
     
     def _reduce_once(self, nonterminal):
         production, probability, index = self._choose_production_reducing(nonterminal)
@@ -75,11 +81,18 @@ class PCFG(nltk.grammar.PCFG):
         probability_rhs = 1
         rhs_symbols, probability_lhs, index = self._reduce_once(nonterminal)
         # print(nonterminal, rhs_symbols, index)
+
+        mixed_rhs = True
+        if all(isinstance(symbol, str) for symbol in rhs_symbols):
+            mixed_rhs = False
+
         for current_position, symbol in enumerate(rhs_symbols):
             if isinstance(symbol, str):
                 derivation = symbol
                 sentence.append(derivation)
                 sentence_len += 1
+                start_position = prefix_length
+                end_position = prefix_length + sentence_len - 1
             else:
                 derivation, probability_non_terminal = self._generate_derivation(symbol, prefix_length + sentence_len)
                 probability_rhs *= probability_non_terminal
@@ -88,10 +101,47 @@ class PCFG(nltk.grammar.PCFG):
                 sentence_len += derivation_len
                 start_position = prefix_length + sentence_len - derivation_len
                 end_position = prefix_length + sentence_len - 1
+            
+            if mixed_rhs:
                 if(symbol not in self.non_terminal_applied_position):
                     self.non_terminal_applied_position[symbol] = []
-                self.non_terminal_applied_position[symbol].append((start_position, end_position, (current_position, nonterminal, index)))                
-                # print(symbol, start_position, end_position, sentence)
+                self.non_terminal_applied_position[symbol].append((start_position, end_position, (current_position, nonterminal, index)))
+            if (nonterminal, index) not in self.non_terminal_applied_position_reverse:
+                self.non_terminal_applied_position_reverse[(nonterminal, index)] = []
+            self.non_terminal_applied_position_reverse[(nonterminal, index)].append((start_position, end_position))
+
         probability_sentence = probability_lhs * probability_rhs
         # return "".join(sentence), probability_sentence
         return sentence, probability_sentence
+
+from nltk.grammar import ProbabilisticProduction
+def induce_pcfg(start, productions):
+    r"""
+    Induce a PCFG grammar from a list of productions.
+
+    The probability of a production A -> B C in a PCFG is:
+
+    |                count(A -> B C)
+    |  P(B, C | A) = ---------------       where \* is any right hand side
+    |                 count(A -> \*)
+
+    :param start: The start symbol
+    :type start: Nonterminal
+    :param productions: The list of productions that defines the grammar
+    :type productions: list(Production)
+    """
+    # Production count: the number of times a given production occurs
+    pcount = {}
+
+    # LHS-count: counts the number of times a given lhs occurs
+    lcount = {}
+
+    for prod in productions:
+        lcount[prod.lhs()] = lcount.get(prod.lhs(), 0) + 1
+        pcount[prod] = pcount.get(prod, 0) + 1
+
+    prods = [
+        ProbabilisticProduction(p.lhs(), p.rhs(), prob=pcount[p] / lcount[p.lhs()])
+        for p in pcount
+    ]
+    return PCFG(start, prods)

@@ -11,9 +11,7 @@ from utils import (
     encode_dataset, 
     get_tokenizer, 
     get_data, 
-    create_dataset_dict, 
-    get_args, 
-    get_parser,
+    get_args,
     get_selected_token_ids,
     GenereteTextCallback,
     GrammarCallback,
@@ -22,48 +20,39 @@ from utils import (
     compute_inference_results,
     process_for_under_trained_tokens,
     text_generation,
-    min_distant_sequences
+    min_distant_sequences,
+    NoShuffleTrainer,
 )
 import json
 import pandas as pd
-from copy import deepcopy
 import wandb
 import logging
 import time
 from datetime import datetime
 import accelerate
 from torch.utils.data import Subset
-
+from config import model_offloading, lr_dict, batch_size_dict
 
 
 
 def training(args, dataset_dict, max_sequence_length, unique_tokens, train_test_distance):
 
-    
-    logger = logging.getLogger(__name__)
     set_seed(args.run_seed)
     tokenizer, checkpoint_path = get_tokenizer(args)
     tokenizer.pad_token = tokenizer.eos_token
     if tokenizer.bos_token_id is None:
         tokenizer.bos_token_id = tokenizer.pad_token_id
 
-    selected_token_ids = get_selected_token_ids(tokenizer, unique_tokens, logger)
+    if not args.nlp_dataset:
+        selected_token_ids = get_selected_token_ids(tokenizer, unique_tokens)
+    else:
+        selected_token_ids = [tokenizer.pad_token_id]
     try:
         local_rank = int(os.environ["LOCAL_RANK"])
-    except:
+    except (KeyError, ValueError):
         assert args.incontext_input
         local_rank = 0
 
-    # selected models, where cpu offloading is needed
-    model_offloading = ["mistralai/Mistral-7B-v0.3", 
-                        "mistralai/Mistral-Nemo-Base-2407", 
-                        "meta-llama/Meta-Llama-3-8B", 
-                        "meta-llama/Meta-Llama-3.1-8B", 
-                        "/NS/formal-grammar-and-memorization/nobackup/bghosh/temp_models/vnanda/Llama-2-13b-hf",
-                        "base_models_vnanda/Llama-2-13b-hf",
-                        "google/gemma-2-9b",
-                        "Qwen/Qwen2.5-14B"
-    ]
     deepspeed_config = "additional/deepspeed_config.json" if args.use_deepspeed and args.model_name not in model_offloading else (
                   "additional/deepspeed_config_offloading.json" if args.use_deepspeed else None
     )        
@@ -75,7 +64,6 @@ def training(args, dataset_dict, max_sequence_length, unique_tokens, train_test_
         encoded_dataset  = encode_dataset(tokenizer=tokenizer, 
                                         dataset=dataset_dict, 
                                         max_sequence_length=max_sequence_length, 
-                                        logger=logger,
                                         verbose=True if local_rank == 0 else False,
                                         instruction_data={
                                             "add_instruction": args.add_instruction and (not args.nlp_dataset) and args.incontext_input,
@@ -133,40 +121,29 @@ def training(args, dataset_dict, max_sequence_length, unique_tokens, train_test_
             print(dataset[eval_dataset]["input_ids"][0])
             print(dataset[eval_dataset]["input_ids"].shape)
         
-    # unused
-    if args.mem_no_batch:
-        # batch size is training size
-        args.batch_size = dataset['train_sequences'].num_rows
-        print("Changing batch size to", args.batch_size)
-        deepspeed_config = "additional/deepspeed_config_offloading.json"
-        print("Applying CPU overloading")
         
     
 
     current_time = datetime.now()
 
-    evaluation_strategy = 'epoch'    # evaluation_strategy = 'steps'
-    logging_strategy = evaluation_strategy
-    save_strategy = evaluation_strategy if args.save_checkpoint or args.save_best_model else 'no'
+    save_strategy = args.evaluation_strategy if args.save_checkpoint or args.save_best_model else 'no'
     if args.incontext_input:
         save_strategy = 'no'
 
     # output directory (initially stored in /tmp, and later moved to ./artifacts/)
     incontext_common_prefix_len = None
     if args.incontext_input:
-        output_dir = f"/tmp/inference_{current_time.strftime('%Y_%m_%d_%H_%M')}_{args.model_name.replace('/', '_')}_{args.grammar_name}_{args.num_samples}_{args.run_seed}_{args.comment.replace(' ', '_')}"
-        if args.incontext_input: # only for inference
-            if args.considered_incontext_examples > 0:
-                assert "incontext_common_prefix" in dataset
-                assert dataset['incontext_common_prefix']['input_ids'].shape[0] > 0
-                incontext_common_prefix_len = len([token for token in dataset['incontext_common_prefix']['input_ids'][0] if token not in [tokenizer.eos_token_id, tokenizer.bos_token_id, tokenizer.pad_token_id]])
-            else:
-                incontext_common_prefix_len = 0
-            args.considered_incontext_examples = (args.considered_incontext_examples, incontext_common_prefix_len) # update
-            output_dir = f"/tmp/incontext_{current_time.strftime('%Y_%m_%d_%H_%M')}_{args.model_name.replace('/', '_')}_{args.grammar_name}_{args.num_samples}_{args.run_seed}_{args.comment.replace(' ', '_')}_{args.considered_incontext_examples[0]}"
+        if args.considered_incontext_examples > 0:
+            assert "incontext_common_prefix" in dataset
+            assert dataset['incontext_common_prefix']['input_ids'].shape[0] > 0
+            incontext_common_prefix_len = len([token for token in dataset['incontext_common_prefix']['input_ids'][0] if token not in [tokenizer.eos_token_id, tokenizer.bos_token_id, tokenizer.pad_token_id]])
+        else:
+            incontext_common_prefix_len = 0
+        args.considered_incontext_examples = (args.considered_incontext_examples, incontext_common_prefix_len) # update
+        output_dir = f"/tmp/incontext_{current_time.strftime('%Y_%m_%d_%H_%M')}_{args.model_name.replace('/', '_')}_{args.grammar_name}_{args.num_samples}_{args.run_seed}_{args.comment.replace(' ', '_')}_{args.considered_incontext_examples[0]}"
 
-            if local_rank == 0:
-                print(f"Using incontext common prefix len: {incontext_common_prefix_len}")
+        if local_rank == 0:
+            print(f"Using incontext common prefix len: {incontext_common_prefix_len}")
             
     else:
         output_dir = f"/tmp/output_{current_time.strftime('%Y_%m_%d_%H_%M')}_{args.model_name.replace('/', '_')}_{args.grammar_name}_{args.num_samples}_{args.run_seed}_{args.comment.replace(' ', '_')}_{args.considered_training_samples}"
@@ -188,15 +165,15 @@ def training(args, dataset_dict, max_sequence_length, unique_tokens, train_test_
         with open(os.path.join(output_dir, "args.json"), "w") as f:
             json.dump(vars(args), f)
 
-    lr_scheduler = args.lr_scheduler
-    warmup_ratio = args.warmup_ratio
+    
+    
     run_name = f"gl | {args.model_name} | {args.grammar_name} | {args.num_samples} | {current_time.strftime('%Y_%m_%d_%H_%M')}"
 
     # for wandb
     params_dict = {
         'max_sequence_length': max_sequence_length,
-        'lr_scheduler': lr_scheduler,
-        'warmup_ratio' : warmup_ratio,
+        'lr_scheduler': args.lr_scheduler,
+        'warmup_ratio' : args.warmup_ratio,
         'output_dir': output_dir,
     }
 
@@ -218,6 +195,9 @@ def training(args, dataset_dict, max_sequence_length, unique_tokens, train_test_
 
     if(args.use_untrained_model):
         config = AutoConfig.from_pretrained(checkpoint_path)
+        if args.arch_config_overrides is not None:
+            for key, value in json.loads(args.arch_config_overrides).items():
+                setattr(config, key, value)
         model = AutoModelForCausalLM.from_config(config)
     else:
         if "gemma" in args.model_name.lower():
@@ -248,13 +228,13 @@ def training(args, dataset_dict, max_sequence_length, unique_tokens, train_test_
         
         training_args = TrainingArguments(
             output_dir = output_dir,
-            eval_strategy = evaluation_strategy,
-            logging_strategy = logging_strategy,
-            # logging_steps=args.logging_steps,
+            eval_strategy = args.evaluation_strategy,
+            logging_strategy = args.evaluation_strategy,
+            logging_steps=args.logging_steps,
             learning_rate = args.learning_rate,
-            lr_scheduler_type = lr_scheduler,
-            warmup_ratio = warmup_ratio,
-            num_train_epochs = args.num_train_epochs,
+            lr_scheduler_type = args.lr_scheduler,
+            warmup_ratio = args.warmup_ratio,
+            num_train_epochs = args.num_train_epochs, 
             max_steps=args.max_steps,
             save_strategy = save_strategy,
             eval_accumulation_steps=1,
@@ -277,17 +257,38 @@ def training(args, dataset_dict, max_sequence_length, unique_tokens, train_test_
 
 
         
-        
-
-        trainer = Trainer(
-            model=model,
-            tokenizer=tokenizer,
-            args=training_args,
-            train_dataset=Subset(dataset["train_sequences"], range(len(dataset["train_sequences"]))),
-            eval_dataset=dataset,
-            data_collator=data_collator,
-            preprocess_logits_for_metrics=preprocess_logits(tokenizer, selected_token_ids),
-        )
+        effective_samples_per_batch = int(os.environ["WORLD_SIZE"]) * args.batch_size * args.logging_steps
+        if not args.adaptive_training:
+            trainer = Trainer(
+                model=model,
+                tokenizer=tokenizer,
+                args=training_args,
+                train_dataset=Subset(dataset["train_sequences"], range(len(dataset["train_sequences"]))),
+                eval_dataset=dataset,
+                data_collator=data_collator,
+                preprocess_logits_for_metrics=preprocess_logits(tokenizer, selected_token_ids),
+            )
+        else:
+            assert args.num_train_epochs == 1 # only one epoch
+            assert not args.incontext_input
+            assert args.evaluation_strategy == "steps"
+            training_args.num_train_epochs = -1
+            training_args.max_steps = dataset["train_sequences"].num_rows // (int(os.environ["WORLD_SIZE"]) * args.batch_size)
+            
+            if local_rank == 0:
+                print("Effective Sample size", effective_samples_per_batch)
+                print("Effective Steps", training_args.max_steps)
+            
+            
+            trainer = NoShuffleTrainer(
+                model=model,
+                tokenizer=tokenizer,
+                args=training_args,
+                train_dataset=Subset(dataset["train_sequences"].select(range(0, len(dataset["train_sequences"]))), range(len(dataset["train_sequences"]))),
+                eval_dataset=dataset,
+                data_collator=data_collator,
+                preprocess_logits_for_metrics=preprocess_logits(tokenizer, selected_token_ids),
+            )
 
         
         grammar_callback = GrammarCallback(base_config=vars(args),
@@ -296,6 +297,7 @@ def training(args, dataset_dict, max_sequence_length, unique_tokens, train_test_
                                         dataset=dataset, 
                                         incontext_common_prefix_len=incontext_common_prefix_len,
                                         train_test_distance=train_test_distance,
+                                        effective_samples_per_batch=effective_samples_per_batch if args.adaptive_training else None
                                         )
         trainer.compute_metrics = compute_metrics(grammar_callback, selected_token_ids)
         generate_text_callback = GenereteTextCallback(tokenizer, 
@@ -304,21 +306,34 @@ def training(args, dataset_dict, max_sequence_length, unique_tokens, train_test_
                                                       compute_msp=args.compute_msp,
                                                       global_prefix_config=args.global_prefix_config)
 
-        if args.store_result:
-            trainer.add_callback(grammar_callback)
+        trainer.add_callback(grammar_callback)
         if args.generate_text:
             trainer.add_callback(generate_text_callback)
         
 
 
-        start_time = time.time() 
-        if not args.incontext_input:
-            trainer.train()
-            if args.save_final_checkpoint:
-                trainer.save_model() # save the model and tokenizer
-        end_time = time.time()
-        
+        start_time = time.time()
+        trainer.train()
+        if args.save_final_checkpoint:
+            trainer.save_model(f"{output_dir}/final/") # save the model and tokenizer
+        if args.adaptive_training:
+            grammar_callback.starting_epoch = trainer.state.epoch
+            trainer.eval_dataset = grammar_callback.dataset.copy()
 
+            # sample 4 * args.considered_eval_samples
+            trainer.eval_dataset['train_sequences'] = trainer.eval_dataset['train_sequences'].shuffle(seed=42).select(range(min(args.considered_training_samples, 4 * args.considered_eval_samples, len(trainer.eval_dataset['train_sequences']))))
+
+            for eval_dataset in grammar_callback.dataset.keys():
+                if eval_dataset != "train_sequences":
+                    del trainer.eval_dataset[eval_dataset]
+
+            if local_rank == 0:
+                print("End eval...")
+                print(trainer.eval_dataset)
+            trainer.evaluate()
+        end_time = time.time()
+
+    
     if(local_rank == 0):
         wandb.finish()
         # store wandb result locally as pickle
@@ -366,72 +381,48 @@ def training(args, dataset_dict, max_sequence_length, unique_tokens, train_test_
         os.system(f"mv {output_dir}/* {output_dir.replace('/tmp/', 'artifacts/')}")
 
         
+        # split results for multilingual experiments
+        
+        if args.multilingual:
+            args.multilingual_grammar_name = args.grammar_name
+            for i, grammar_name in enumerate(args.grammar_name.split("_aNd_")):
+                split_output_dir = f"{output_dir.replace('/tmp/', 'artifacts/').replace(args.multilingual_grammar_name, grammar_name)}_splitted_{i+1}"
+                os.system(f"cp -r {output_dir.replace('/tmp/', 'artifacts/')} {split_output_dir}")
+                
+                # args
+                args.grammar_name = grammar_name
+                with open(os.path.join(split_output_dir, "args.pkl"), "wb") as f:
+                    pickle.dump(vars(args), f)
+                with open(os.path.join(split_output_dir, "args.json"), "w") as f:
+                    json.dump(vars(args), f)
+                
+                # results
+                for filename in ["grammar_eval_result_average.csv", "grammar_eval_result.csv", "memorization_pruning.csv"]:
+                    if not os.path.exists(f"{split_output_dir}/{filename}"):
+                        continue
+                    df_target = pd.read_csv(f"{split_output_dir}/{filename}")
+                    relevant_eval_datasets = [
+                        eval_dataset for eval_dataset in df_target["eval_dataset"].unique() if eval_dataset.endswith(f"_g{i+1}")
+                    ]
+                    eval_dataset_map = {
+                        eval_dataset: eval_dataset.replace(f"_g{i+1}", "")
+                        for eval_dataset in relevant_eval_datasets
+                    }
+                    df_target = df_target[df_target["eval_dataset"].isin(relevant_eval_datasets)].copy()
+                    df_target["eval_dataset"] = df_target["eval_dataset"].apply(lambda x: eval_dataset_map[x])
+                    df_target.to_csv(f"{split_output_dir}/{filename}", index=False)
+                
+
+            
 
 
 if __name__ == "__main__":
-    args = get_args(get_parser())
-    lr_dict = {
-        "EleutherAI/pythia-6.9b": 0.00001,
-        "EleutherAI/pythia-1b": 0.00001,
-        "EleutherAI/pythia-2.8b": 0.00001,
-        
-        "mistralai/Mistral-7B-v0.3": 0.000005,
-        "mistralai/Mistral-Nemo-Base-2407": 0.000005,
-        
-        "meta-llama/Meta-Llama-3-8B": 0.00005,
-        "meta-llama/Meta-Llama-3.1-8B": 0.00005,
-        "meta-llama/Llama-3.2-1B": 0.00005,
-        "meta-llama/Llama-3.2-3B": 0.00005,
-
-        "google/gemma-2-2b": 0.00005,
-        "google/gemma-2-9b": 0.00005,
-
-        "/NS/llm-1/nobackup/vnanda/llm_base_models/Llama-2-7b-hf": 0.000005,
-        "/NS/llm-1/nobackup/vnanda/llm_base_models/Llama-2-13b-hf": 0.000005,
-
-        "/NS/llm-1/nobackup/soumi/opt-model-1.3B": 0.000005,
-        "/NS/llm-1/nobackup/soumi/opt-model-2.7B": 0.000005,
-        "/NS/llm-1/nobackup/soumi/opt-model-6.7B": 0.000005,
-
-        "Qwen/Qwen2.5-0.5B":0.00005,
-        "Qwen/Qwen2.5-1.5B":0.00005,
-        "Qwen/Qwen2.5-7B":0.00005,
-        "Qwen/Qwen2.5-14B":0.00005,
-    }
-
-    batch_size_dict = {
-        "EleutherAI/pythia-6.9b": 8,
-        "EleutherAI/pythia-1b": 8,
-        "EleutherAI/pythia-2.8b": 8,
-        
-        "mistralai/Mistral-7B-v0.3": 8,
-        "mistralai/Mistral-Nemo-Base-2407": 8,
-        
-        "meta-llama/Meta-Llama-3-8B": 8,
-        "meta-llama/Meta-Llama-3.1-8B": 8,
-        "meta-llama/Llama-3.2-1B": 8,
-        "meta-llama/Llama-3.2-3B": 8,
-
-        "google/gemma-2-2b": 8,
-        "google/gemma-2-9b": 8,
-
-        "/NS/llm-1/nobackup/vnanda/llm_base_models/Llama-2-7b-hf": 8,
-        "/NS/llm-1/nobackup/vnanda/llm_base_models/Llama-2-13b-hf": 8,
-
-
-        "/NS/llm-1/nobackup/soumi/opt-model-1.3B": 8,
-        "/NS/llm-1/nobackup/soumi/opt-model-2.7B": 8,
-        "/NS/llm-1/nobackup/soumi/opt-model-6.7B": 8,
-
-        "Qwen/Qwen2.5-14B": 4,
-    }
-
-    
+    args = get_args()
     args.learning_rate = lr_dict[args.model_name] if args.model_name in lr_dict else args.learning_rate
     if not args.incontext_input:
         args.batch_size = batch_size_dict[args.model_name] if args.model_name in batch_size_dict else args.batch_size
         
-    data_dict, max_sequence_length, unique_tokens = get_data(args)
+    dataset_dict, max_sequence_length, unique_tokens = get_data(args)
 
     # preprocessing for memorization intervention
     distance_based_result = None
@@ -440,6 +431,6 @@ if __name__ == "__main__":
         if os.path.exists(meta_data_filename):
             with open(meta_data_filename, 'rb') as f:
                 string_meta_data = pickle.load(f)
-                distance_based_result = min_distant_sequences(data_dict['train_sequences'], data_dict['test_sequences'], string_meta_data['sequence_prob_dict'])
-    dataset_dict = create_dataset_dict(data_dict)
+                distance_based_result = min_distant_sequences(dataset_dict['train_sequences']['text'], dataset_dict['test_sequences']['text'], string_meta_data['sequence_prob_dict'])
+    
     training(args, dataset_dict, max_sequence_length, unique_tokens, distance_based_result)

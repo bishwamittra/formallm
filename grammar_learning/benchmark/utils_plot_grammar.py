@@ -50,9 +50,12 @@ def xticks_processor(token_sequence, nonterminal_applied_position_map, is_hierar
                     token_sequence_comment[position] = []
                 if(position == start_position):
                     if isinstance(non_terminal, tuple):
+                        assert all([isinstance(sym, Nonterminal) for sym in non_terminal])
                         non_terminal_symbol = ''.join([sym.symbol() if isinstance(sym, Nonterminal) else sym for sym in non_terminal])
-                    else:
+                    elif isinstance(non_terminal, Nonterminal):
                         non_terminal_symbol = non_terminal.symbol()
+                    else:
+                        non_terminal_symbol = non_terminal
                     if "_" in non_terminal_symbol:
                         num_underscores = non_terminal_symbol.count("_")
                         split_elem = non_terminal_symbol.split("_")
@@ -93,6 +96,64 @@ def xticks_processor(token_sequence, nonterminal_applied_position_map, is_hierar
             )
 
     return token_sequence
+
+
+def xticks_processor_with_lexer_edit(token_sequence,
+        nonterminal_applied_position_map,
+        perturbation_result,
+        verbose=False
+):
+    token_sequence_comment = {}
+    for non_terminal in nonterminal_applied_position_map.keys():
+        for (start_position, end_position, _) in nonterminal_applied_position_map[non_terminal]:
+            for position in range(start_position, end_position+1):
+                if position not in token_sequence_comment:
+                    token_sequence_comment[position] = []
+                if position == start_position:
+                    token_sequence_comment[position].append(non_terminal.symbol())
+                elif position == end_position:
+                    token_sequence_comment[position].append(';')
+                else:
+                    token_sequence_comment[position].append('.')
+
+             
+    position_color_red = [False for _ in range(len(token_sequence))]
+    for (position, operation, correct_token) in perturbation_result:
+
+        
+        if(operation == "replace"):
+            token_sequence_comment[position].extend(["Rep", correct_token])
+            position_color_red[position] = True
+        elif(operation == "insert"):
+            token_sequence_comment[position].append("Ins")
+            position_color_red[position] = True
+        elif(operation == "delete"):
+            if position == len(token_sequence):
+                position -= 1
+            position_color_red[position] = True
+            token_sequence_comment[position].extend(["Del", correct_token])
+        else:
+            raise ValueError("Unknown operation")
+
+
+    token_sequence = list(token_sequence)
+    for position in range(len(token_sequence)):
+        if position in token_sequence_comment:
+            token_sequence[position] = color('#000000' if not position_color_red[position] else '#FF0000', 
+                                            token_sequence[position], 
+                                            comment_dict = {
+                                                "comment": f"<br>{'<br>'.join(token_sequence_comment[position])}",
+                                                "font_weight": 0.7,
+                                                "font_color": '#808080' if not position_color_red[position] else '#FF0000',
+                                                "depth": None
+                                            }
+            )
+        else:
+            token_sequence[position] = color('#000000', 
+                                            token_sequence[position],
+            )
+
+    return tuple(token_sequence)
 
 def plot_nonterminal_map(token_sequence, nonterminal_applied_position_map, is_hierarchy):
     token_sequence_xticks = xticks_processor(token_sequence, nonterminal_applied_position_map, is_hierarchy=is_hierarchy)

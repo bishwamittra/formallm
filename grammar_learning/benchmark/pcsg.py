@@ -1,6 +1,8 @@
 import random
 import nltk
 from nltk.grammar import ProbabilisticProduction, Nonterminal
+import heapq
+from collections import deque
 
 
 def from_pcsg_string(grammar_string, start_symbol="S"):
@@ -87,7 +89,7 @@ class PCSG:
         """
         self.productions = productions
         self.start_symbol = start_symbol
-        self._lhs_index = self._index_productions()
+        self._lhs_index = self._index_lhs_productions()
         self._lexical_index = self._get_terminals()
 
 
@@ -112,7 +114,7 @@ class PCSG:
         return terminals
 
 
-    def _index_productions(self):
+    def _index_lhs_productions(self):
         """
         Index productions based on their left-hand side (LHS).
         Returns a dictionary mapping LHS symbols to production rules.
@@ -167,20 +169,31 @@ class PCSG:
             tuple: (Production rule, probability, index in context).
         """
         applicable_rules = []
-        for i in range(len(context)):
-            for length in range(1, len(context) - i + 1):
+        for length in range(len(context), 0, -1): # prioritize longer segments
+            found_one = False
+            for i in range(len(context) - length + 1):
+                assert i + length <= len(context)
                 segment = tuple(context[i:i+length])
                 if segment in self._lhs_index:
                     productions = self._lhs_index[segment]
                     probabilities = [prod.prob() for prod in productions]
                     applicable_rules.append((productions, probabilities, i, length)) # store all information. Sample later
+                    found_one = True
+            if found_one: # prioritize longer segments
+                break
+
 
         if not applicable_rules:
             return None  # No valid rule to apply
 
+        # if len(applicable_rules) >= 1:
+        #     print(context)
+            # for applicable_rule in applicable_rules:
+            #     print(applicable_rule)
+            
 
-        # select a random lhs
-        applicable_rule = random.choice(applicable_rules)
+        # applicable_rule = random.choice(applicable_rules) # random
+        applicable_rule = applicable_rules[0] # deterministic (left to right)
         productions = applicable_rule[0]
         production_indices = list(range(len(productions)))
         probabilities = applicable_rule[1]
@@ -204,15 +217,11 @@ class PCSG:
         """
         probability = 1.0
         while any(isinstance(sym, Nonterminal) for sym in sentence):
-            # print()
-            # print(sentence)
             choice = self._choose_production_reducing(sentence)
             if choice is None:
-                # print("No valid expansion")
-                break  # No valid expansion, terminate
+                break
             
 
-            # print(choice)
             production, prob, index, length, production_rule_index = choice
             probability *= prob
             sentence[index:index+length] = production.rhs()  # Apply production
@@ -222,6 +231,158 @@ class PCSG:
                                                                 index+len(production.rhs()),
                                                                 (0, production.lhs(), production_rule_index)))
         
-        # return " ".join(sentence), probability  # Convert list to string
-        # return sentence, probability
         return tuple(sentence), probability
+
+
+    
+    # # an expensive parsing
+
+    # def _index_rhs_productions(self):
+    #     """
+    #     Index productions based on their right-hand side (RHS).
+    #     Returns a dictionary mapping RHS tuples to lists of production rules.
+    #     This is used for reverse (parsing) search: RHS -> LHS.
+    #     """
+    #     index = {}
+    #     for production in self.productions:
+    #         rhs = tuple(production.rhs())
+    #         if rhs not in index:
+    #             index[rhs] = []
+    #         index[rhs].append(production)
+    #     return index
+
+
+    # def parse(self, tokens, max_steps=100000, node_limit=50000, return_derivation=False):
+    #     """
+    #     Brute-force parser for the PCSG (context-sensitive grammar) using
+    #     reverse rewriting: starting from the terminal sentence or tokens, repeatedly
+    #     apply inverse productions (RHS -> LHS) to see if we can reach
+    #     the start symbol.
+
+    #     Args:
+    #         tokens (tuple(str)): Input sentence as a tuple of terminals.
+    #         max_steps (int): Hard cap on total exploration steps to avoid
+    #                          infinite / huge searches.
+    #         return_derivation (bool): If True, also return one derivation
+    #                                   (sequence of applied productions) and
+    #                                   its probability.
+
+    #     Returns:
+    #         If return_derivation == False:
+    #             bool: True if accepted by the grammar, False otherwise.
+    #         If return_derivation == True:
+    #             (accepted, prob, derivation)
+    #             where:
+    #                 accepted (bool)
+    #                 prob (float): probability of *one* found derivation
+    #                 derivation (list): list of steps (index, production)
+    #                                    in reverse order (sentence -> start)
+    #     """
+        
+    #     assert isinstance(tokens, tuple)
+
+    #     # Build RHS index if not already available
+    #     if not hasattr(self, "_rhs_index"):
+    #         self._rhs_index = self._index_rhs_productions()
+
+    #     # Priority queue: items are (-prob, steps_so_far, current_seq, derivation)
+    #     # We use -prob so that higher probability is popped first.
+    #     start_state = tokens
+    #     pq = []
+    #     heapq.heappush(pq, (-1.0, 0, start_state, []))
+
+    #     visited = set()
+    #     visited.add(start_state)
+
+    #     target = (self.start_symbol,)
+    #     total_popped = 0
+    #     steps = 0
+
+    #     while pq and steps < max_steps and total_popped < node_limit:
+    #         steps += 1
+    #         neg_prob, depth, current, derivation = heapq.heappop(pq)
+    #         total_popped += 1
+    #         prob = -neg_prob
+
+    #         # --- Acceptance condition ---
+    #         if current == target:
+    #             if return_derivation:
+    #                 return True, prob, derivation
+    #             else:
+    #                 return True
+
+    #         n = len(current)
+
+    #         # --- Try all spans for reverse rewriting (RHS -> LHS) ---
+    #         for i in range(n):
+    #             for length in range(1, n - i + 1):
+    #                 segment = tuple(current[i:i+length])
+
+    #                 if segment in self._rhs_index:
+    #                     for prod in self._rhs_index[segment]:
+    #                         # Replace this span with the production's LHS
+    #                         new_seq = current[:i] + tuple(prod.lhs()) + current[i+length:]
+
+    #                         if new_seq not in visited:
+    #                             visited.add(new_seq)
+    #                             new_prob = prob * prod.prob()
+    #                             new_derivation = derivation + [(i, prod)]
+    #                             # Depth increases by 1 for each rewrite
+    #                             heapq.heappush(pq, (-new_prob, depth + 1, new_seq, new_derivation))
+
+    #     # If we exit the loop: either queue is empty or we hit limits
+    #     if return_derivation:
+    #         return False, 0.0, None
+    #     else:
+    #         return False
+
+    #     # # BFS queue: each item is (current_sequence, prob, derivation_steps)
+    #     # # current_sequence: tuple of symbols (Nonterminals and/or strings)
+    #     # # prob: product of production probabilities along this path
+    #     # # derivation_steps: list of (position, production) used in reverse
+    #     # start_state = tokens
+    #     # queue = deque()
+    #     # queue.append((start_state, 1.0, []))
+
+    #     # visited = set()
+    #     # visited.add(start_state)
+
+    #     # steps = 0
+    #     # target = (self.start_symbol,)  # we want to reduce to just the start symbol
+
+    #     # while queue and steps < max_steps:
+    #     #     current, prob, derivation = queue.popleft()
+    #     #     steps += 1
+
+    #     #     # Acceptance condition
+    #     #     if current == target:
+    #     #         if return_derivation:
+    #     #             return True, prob, derivation
+    #     #         else:
+    #     #             return True
+
+    #     #     n = len(current)
+
+    #     #     # Try applying inverse productions on all spans
+    #     #     for i in range(n):
+    #     #         for length in range(1, n - i + 1):
+    #     #             segment = tuple(current[i:i+length])
+
+    #     #             # If this span matches any RHS, we can reduce it to the LHS
+    #     #             if segment in self._rhs_index:
+    #     #                 for prod in self._rhs_index[segment]:
+    #     #                     # Replace this span with the production's LHS
+    #     #                     new_seq = current[:i] + tuple(prod.lhs()) + current[i+length:]
+
+    #     #                     if new_seq not in visited:
+    #     #                         visited.add(new_seq)
+    #     #                         new_prob = prob * prod.prob()
+    #     #                         new_derivation = derivation + [(i, prod)]
+    #     #                         queue.append((new_seq, new_prob, new_derivation))
+
+    #     # # If we exhaust the queue or hit max_steps without finding the start symbol
+    #     # if return_derivation:
+    #     #     return False, 0.0, None
+    #     # else:
+    #     #     return False
+

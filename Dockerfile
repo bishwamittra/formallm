@@ -9,4 +9,4 @@ WORKDIR $EXP_DIR
 # Copy and install dependencies
 COPY grammar_learning $EXP_DIR/
 
-RUN pip install --no-cache-dir -r training/requirements310.in
+RUN pip install --no-cache-dir -r requirements310.txt

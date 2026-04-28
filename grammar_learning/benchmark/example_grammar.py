@@ -12,9 +12,10 @@ grammar_dict = {
     """,
 
     "pcfg_example_context_free": """
-        S ->  [0.1]
-        S -> 'a' S 'a' [0.45]
-        S -> 'b' S 'b' [0.45]
+        S -> P [1]
+        P -> 'a' P 'a' [0.45]
+        P -> 'b' P 'b' [0.45]
+        P ->  [0.1]
     """,
 
     "pcfg_example_context_free_2": """
@@ -261,6 +262,55 @@ grammar_dict = {
         A9 -> '8' '7' [0.10]
     """,
 
+
+    "pcfg_cfg3b_disjoint_terminals_print": """
+        S -> A19 [1]
+        A19 -> A18 A16 [0.50]
+        A19 -> A16 A18 A17 [0.50]
+        A18 -> A15 A14 A13 [0.50]
+        A18 -> A14 A15 A13 [0.50]
+        A17 -> A14 A13 A15 [0.50]
+        A17 -> A13 A14 A15 [0.50]
+        A16 -> A14 A15 [0.50]
+        A16 -> A15 A14 [0.50]
+        A15 -> A11 A12 A10 [0.50]
+        A15 -> A12 A10 A11 [0.50]
+        A14 -> A11 A10 A12 [0.50]
+        A14 -> A10 A11 A12 [0.50]
+        A13 -> A10 A12 A11 [0.50]
+        A13 -> A12 A11 A10 [0.50]
+        A12 -> '9' '8' '7' [0.50]
+        A12 -> '8' '7' [0.50]
+        A11 -> '6' '5' [0.50]
+        A11 -> '6' '4' '5' [0.50]
+        A10 -> '3' '1' [0.50]
+        A10 -> '1' '2' '3' [0.50]
+    """,
+
+
+    "pcfg_cfg3b_disjoint_terminals_latin_print": """
+        S -> A19 [1]
+        A19 -> A18 A16 [0.50]
+        A19 -> A16 A18 A17 [0.50]
+        A18 -> A15 A14 A13 [0.50]
+        A18 -> A14 A15 A13 [0.50]
+        A17 -> A14 A13 A15 [0.50]
+        A17 -> A13 A14 A15 [0.50]
+        A16 -> A14 A15 [0.50]
+        A16 -> A15 A14 [0.50]
+        A15 -> A11 A12 A10 [0.50]
+        A15 -> A12 A10 A11 [0.50]
+        A14 -> A11 A10 A12 [0.50]
+        A14 -> A10 A11 A12 [0.50]
+        A13 -> A10 A12 A11 [0.50]
+        A13 -> A12 A11 A10 [0.50]
+        A12 -> 'i' 'h' 'g' [0.50]
+        A12 -> 'h' 'g' [0.50]
+        A11 -> 'f' 'e' [0.50]
+        A11 -> 'f' 'd' 'e' [0.50]
+        A10 -> 'c' 'a' [0.50]
+        A10 -> 'a' 'b' 'c' [0.50]
+    """,
 
     "pcfg_cfg3b_disjoint_terminals": """
         S -> A16 [1]
@@ -768,6 +818,55 @@ grammar_dict = {
     """,
 
 
+    "pcfg_cfg3b_eq_len_skewed_prob_latin": """
+        S -> A16 [1]
+        A16 -> A15 A14 A13 [0.95]
+        A16 -> A13 A15 A14 [0.05]
+        A13 -> A11 A12 [0.95]
+        A13 -> A12 A11 [0.05]
+        A14 -> A11 A10 A12 [0.95]
+        A14 -> A10 A11 A12 [0.05]
+        A15 -> A12 A11 A10 [0.95]
+        A15 -> A11 A12 A10 [0.05]
+        A10 -> A7 A9 A8 [0.95]
+        A10 -> A9 A8 A7 [0.05]
+        A11 -> A8 A7 A9 [0.95]
+        A11 -> A7 A8 A9 [0.05]
+        A12 -> A8 A9 A7 [0.95]
+        A12 -> A9 A7 A8 [0.05]
+        A7 -> 'c' 'a' 'b' [0.95]
+        A7 -> 'a' 'b' 'c' [0.05]
+        A8 -> 'f' 'e' 'd' [0.95]
+        A8 -> 'f' 'd' 'e' [0.05]
+        A9 -> 'i' 'h' 'g' [0.95]
+        A9 -> 'h' 'g' 'i' [0.05]
+    """,
+
+    "pcfg_cfg3b_eq_len_skewed_prob_latin_2": """
+        S -> A16 [1]
+        A16 -> A15 A14 A13 [0.95]
+        A16 -> A13 A15 A14 [0.05]
+        A13 -> A11 A12 [0.95]
+        A13 -> A12 A11 [0.05]
+        A14 -> A11 A10 A12 [0.95]
+        A14 -> A10 A11 A12 [0.05]
+        A15 -> A12 A11 A10 [0.95]
+        A15 -> A11 A12 A10 [0.05]
+        A10 -> A7 A9 A8 [0.95]
+        A10 -> A9 A8 A7 [0.05]
+        A11 -> A8 A7 A9 [0.95]
+        A11 -> A7 A8 A9 [0.05]
+        A12 -> A8 A9 A7 [0.95]
+        A12 -> A9 A7 A8 [0.05]
+        A7 -> 'l' 'j' 'k' [0.95]
+        A7 -> 'j' 'k' 'l' [0.05]
+        A8 -> 'o' 'n' 'm' [0.95]
+        A8 -> 'o' 'm' 'n' [0.05]
+        A9 -> 'r' 'q' 'p' [0.95]
+        A9 -> 'q' 'p' 'r' [0.05]
+    """,
+
+
     "pcfg_cfg3b_eq_len_skewed_prob_0.90": """
         S -> A16 [1]
         A16 -> A15 A14 A13 [0.90]
@@ -888,6 +987,31 @@ grammar_dict = {
         A8 -> '6' '4' '5' [0.50]
         A9 -> '9' '8' '7' [0.50]
         A9 -> '8' '7' [0.50]
+    """,
+
+    "pcsg_csg3b_disjoint_terminals_low_level_1": """
+        S -> A16 [1]
+        A16 -> A15 A13 [0.50]
+        A16 -> A13 A15 A14 [0.50]
+        A13 -> A11 A12 [0.50]
+        A13 -> A12 A11 [0.50]
+        A14 -> A11 A10 A12 [0.50]
+        A14 -> A10 A11 A12 [0.50]
+        A15 -> A12 A11 A10 [0.50]
+        A15 -> A11 A12 A10 [0.50]
+        A10 -> A7 A9 A8 [0.50]
+        A10 -> A9 A8 A7 [0.50]
+        A11 -> A8 A7 A9 [0.50]
+        A11 -> A7 A8 A9 [0.50]
+        A12 -> A8 A9 A7 [0.50]
+        A12 -> A9 A7 A8 [0.50]
+        A7 -> '3' '1' [0.50]
+        A7 -> '1' '2' '3' [0.50]
+        A8 -> '6' '5' [0.50]
+        A8 -> '6' '4' '5' [0.50]
+        A9 -> '9' '8' '7' [0.50]
+        A9 -> '8' '7' [0.50]
+        '1' '6' '5' -> '1' '5' '6' '1' [1]
     """,
 
 
@@ -2466,6 +2590,74 @@ grammar_dict = {
         A9 -> 'h' 'g' 'i' [0.02]
     """,
 
+    "pcfg_tiny_1": """
+        S -> A3 A4 [1]
+        A3 -> A1 A1 A1 A1 A1 [1]
+        A4 -> A2 A2 A2 A2 A2 [1]
+        A1 -> '3' '1' '5' [0.333]
+        A1 -> '1' '2' '3' [0.333]
+        A1 -> '5' '4' '4' [0.333]
+        A2 -> '6' '9' '8' [0.333]
+        A2 -> '7' '10' '7' [0.333]
+        A2 -> '10' '6' '9' [0.333]
+    """,
+
+    "pcsg_tiny_1": """
+        S -> A3 A4 [1]
+        A3 -> A1 A1 A1 A1 A1 [1]
+        A4 -> A2 A2 A2 A2 A2 [1]
+        A1 -> '3' '1' '5' [0.333]
+        A1 -> '1' '2' '3' [0.333]
+        A1 -> '5' '4' '4' [0.333]
+        A2 -> '6' '9' '8' [0.333]
+        A2 -> '7' '10' '7' [0.333]
+        A2 -> '10' '6' '9' [0.333]
+        A1 A1 -> A1 A2 [1]
+        A2 A2 -> A2 A1 [1]
+    """,
+
+    "pcfg_tiny_demo": """
+        S -> A B [1]
+        A -> '3' '1' '2' [0.5]
+        A -> '4' '2' '5' [0.5]
+        B -> '1' '2' '3' [0.5]
+        B -> '2' '5' '4' [0.5]
+    """,
+
+    "pcfg_presentation_grammar": """
+        S -> P Q [1]
+        P -> '1' '2' '3' [0.8]
+        P -> '4' '5' '6' [0.2]
+        Q -> 'a' 'b' 'c' [0.7]
+        Q -> 'd' 'e' 'f' [0.3]
+    """,
+
+    "pcfg_tiny_demo_rewritten": """
+        S -> A_0 [1.0]
+        A_0 -> '3' A_1 [0.4926]
+        A_0 -> '4' A_7 [0.5074]
+        A_1 -> '1' A_2 [1.0]
+        A_2 -> '2' A_3 [1.0]
+        A_3 -> '2' A_4 [0.494519]
+        A_3 -> '1' A_13 [0.505481]
+        A_4 -> '5' A_5 [1.0]
+        A_5 -> '4' A_6 [1.0]
+        A_6 ->  [1.0]
+        A_7 -> '2' A_8 [1.0]
+        A_8 -> '5' A_9 [1.0]
+        A_9 -> '2' A_10 [0.501577]
+        A_9 -> '1' A_16 [0.498423]
+        A_10 -> '5' A_11 [1.0]
+        A_11 -> '4' A_12 [1.0]
+        A_12 ->  [1.0]
+        A_13 -> '2' A_14 [1.0]
+        A_14 -> '3' A_15 [1.0]
+        A_15 ->  [1.0]
+        A_16 -> '2' A_17 [1.0]
+        A_17 -> '3' A_18 [1.0]
+        A_18 ->  [1.0]
+    """
+
 }
 
 grammar_details_dict = {
@@ -2477,7 +2669,7 @@ grammar_details_dict = {
             1: [Nonterminal("A9"), Nonterminal("A8"), Nonterminal("A7")],
         },
         "nonterminal_to_level": {
-            Nonterminal("S"): -100,
+            Nonterminal("S"): 5,
             Nonterminal("A16"): 4,
             Nonterminal("A15"): 3,
             Nonterminal("A14"): 3,
@@ -2488,6 +2680,28 @@ grammar_details_dict = {
             Nonterminal("A9"): 1,
             Nonterminal("A8"): 1,
             Nonterminal("A7"): 1,
+        }
+    },
+
+    "pcfg_cfg3b_disjoint_terminals_print": {
+        "level_to_nonterminals": {
+            4: [Nonterminal("A19")],
+            3: [Nonterminal("A18"), Nonterminal("A17"), Nonterminal("A16")],
+            2: [Nonterminal("A15"), Nonterminal("A14"), Nonterminal("A13")],
+            1: [Nonterminal("A12"), Nonterminal("A11"), Nonterminal("A10")],
+        },
+        "nonterminal_to_level": {
+            Nonterminal("S"): 5,
+            Nonterminal("A19"): 4,
+            Nonterminal("A18"): 3,
+            Nonterminal("A17"): 3,
+            Nonterminal("A16"): 3,
+            Nonterminal("A15"): 2,
+            Nonterminal("A14"): 2,
+            Nonterminal("A13"): 2,
+            Nonterminal("A12"): 1,
+            Nonterminal("A11"): 1,
+            Nonterminal("A10"): 1,
         }
     },
 
@@ -2516,6 +2730,28 @@ grammar_details_dict["pcfg_cfg3b_eq_len_skewed_prob_0.90"] = grammar_details_dic
 grammar_details_dict["pcfg_cfg3b_eq_len_skewed_prob_0.98"] = grammar_details_dict["pcfg_cfg3b_disjoint_terminals"]
 
 
+grammar_details_dict["pcfg_cfg3b_eq_len_skewed_prob_latin"] = grammar_details_dict["pcfg_cfg3b_disjoint_terminals"]
+grammar_details_dict["pcfg_cfg3b_eq_len_skewed_prob_latin_2"] = grammar_details_dict["pcfg_cfg3b_disjoint_terminals"]
+
+
+
+# def skew_distribution(probs, skewness):
+#     """
+#     Skew a probability distribution using the skew-normal distribution.
+
+#     :param probs: List of probabilities (must sum to 1)
+#     :param skewness: Skew factor (positive = right skew, negative = left skew, 0 = unchanged)
+#     :return: Skewed probability distribution
+#     """
+#     n = len(probs)  # Number of items
+#     if skewness == 0:
+#         return np.array(probs)  # No skew, return original
+
+#     x = np.linspace(-1, 1, n)  # Symmetric range
+#     skewed_vals = skewnorm.pdf(x, skewness)  # Generate skewed values
+#     skewed_probs = skewed_vals / np.sum(skewed_vals)  # Normalize to sum to 1
+#     return skewed_probs
+
 
 def skew_distribution(probs, skewness):
     """
@@ -2531,24 +2767,30 @@ def skew_distribution(probs, skewness):
 
     x = np.linspace(-1, 1, n)  # Symmetric range
     skewed_vals = skewnorm.pdf(x, skewness)  # Generate skewed values
+    skewed_vals = skewed_vals ** skewness # sharpening
     skewed_probs = skewed_vals / np.sum(skewed_vals)  # Normalize to sum to 1
     return skewed_probs
 
 
-def hierarchical_cfg(max_depth, 
-                     max_breadth, 
+def hierarchical_cfg(depth, 
+                     breadth,
+                     non_terminals_per_depth, 
                      production_per_non_terminal,
                      skewness, 
                      terminals,
                      seed=10):
-    assert max_depth >= 1
-    assert max_breadth >= 1
+    assert depth >= 1
+    assert breadth >= 1
+    assert breadth <= 100
     assert production_per_non_terminal >= 1
-    assert isinstance(skewness, float)
+    assert production_per_non_terminal <= 100
     assert isinstance(terminals, list)
     num_terminals = len(terminals)
+    assert num_terminals >= 1
+    assert non_terminals_per_depth >= 1
+    
 
-    non_terminal_counter = 1
+    
     non_terminal_symbol = 'A'
     productions = [] # a list of tuple: 1st entry is a non-terminal lhs, 2nd entry is a list of terminal/non-terminal rhs, and 3rd entry is the probability of the production
     depth_to_non_terminal = {}
@@ -2556,35 +2798,49 @@ def hierarchical_cfg(max_depth,
 
     random.seed(seed)
 
-    for depth in range(1, max_depth+1):
-        for i in range(max_breadth):
+    for d in range(1, depth+1):
+        non_terminal_counter = 0
+        for _ in range(non_terminals_per_depth):
             prob_list = [1/production_per_non_terminal for _ in range(production_per_non_terminal)]
             prob_list = skew_distribution(prob_list, skewness)
-            prob_list = [round(prob, 4) for prob in prob_list]
+            prob_list = ['{:.10f}'.format(prob) for prob in prob_list]
+
+            # rhs pre-list
+            if d == 1:
+                rhs_list = [random.choices(terminals, k=100)[:breadth] for _ in range(100)]
+            else:
+                rhs_list = [random.choices(depth_to_non_terminal[d-1], k=100)[:breadth] for _ in range(100)]
+            
+            rhs_counter = 0
             for j in range(production_per_non_terminal):
-                lhs = f"{non_terminal_symbol}_{non_terminal_counter}"
-                if depth == 1:
-                    rhs = random.choices(terminals, k=random.randint(1, max_breadth))
+                lhs = f"{non_terminal_symbol}_{d}_{non_terminal_counter}"
+                if d == 1:
+                    rhs = rhs_list[rhs_counter]
                     rhs = [f"'{terminal}'" for terminal in rhs]
                 else:
-                    rhs = random.choices(depth_to_non_terminal[depth-1], k=random.randint(1, max_breadth))
-                
+                    rhs = rhs_list[rhs_counter]
+                    
+                rhs_counter += 1
+
                 productions.append(
                     (lhs, rhs, prob_list[j])
                 )
-            if depth not in depth_to_non_terminal:
-                depth_to_non_terminal[depth] = []
-            depth_to_non_terminal[depth].append(f"{non_terminal_symbol}_{non_terminal_counter}")
-            non_terminal_to_depth[f"{non_terminal_symbol}_{non_terminal_counter}"] = depth
-            if depth != max_depth:
+        
+        
+            if d not in depth_to_non_terminal:
+                depth_to_non_terminal[d] = []
+            depth_to_non_terminal[d].append(f"{non_terminal_symbol}_{d}_{non_terminal_counter}")
+            non_terminal_to_depth[f"{non_terminal_symbol}_{d}_{non_terminal_counter}"] = d
+            if d != depth:
                 non_terminal_counter += 1
             else:
                 break
-
+            
+    
     # starting production rule
     productions.insert(
         0, 
-        ("S", [f"{non_terminal_symbol}_{non_terminal_counter}"], 1)
+        ("S", [f"{non_terminal_symbol}_{d}_0"], 1)
     )
             
 
@@ -2594,6 +2850,71 @@ def hierarchical_cfg(max_depth,
 
 
     return grammar
+    
+
+
+
+# def hierarchical_cfg(max_depth, 
+#                      max_breadth, 
+#                      production_per_non_terminal,
+#                      skewness, 
+#                      terminals,
+#                      seed=10):
+#     assert max_depth >= 1
+#     assert max_breadth >= 1
+#     assert production_per_non_terminal >= 1
+#     assert isinstance(skewness, float)
+#     assert isinstance(terminals, list)
+#     num_terminals = len(terminals)
+
+#     non_terminal_counter = 1
+#     non_terminal_symbol = 'A'
+#     productions = [] # a list of tuple: 1st entry is a non-terminal lhs, 2nd entry is a list of terminal/non-terminal rhs, and 3rd entry is the probability of the production
+#     depth_to_non_terminal = {}
+#     non_terminal_to_depth = {}
+
+#     random.seed(seed)
+
+#     for depth in range(1, max_depth+1):
+#         for i in range(max_breadth):
+#             prob_list = [1/production_per_non_terminal for _ in range(production_per_non_terminal)]
+#             prob_list = skew_distribution(prob_list, skewness)
+#             # prob_list = [round(prob, 4) for prob in prob_list]
+#             # '{:.20f}'.format(a)
+#             prob_list = ['{:.10f}'.format(prob) for prob in prob_list]
+#             for j in range(production_per_non_terminal):
+#                 lhs = f"{non_terminal_symbol}_{non_terminal_counter}"
+#                 if depth == 1:
+#                     rhs = random.choices(terminals, k=random.randint(1, max_breadth))
+#                     rhs = [f"'{terminal}'" for terminal in rhs]
+#                 else:
+#                     rhs = random.choices(depth_to_non_terminal[depth-1], k=random.randint(1, max_breadth))
+                
+#                 productions.append(
+#                     (lhs, rhs, prob_list[j])
+#                 )
+#             if depth not in depth_to_non_terminal:
+#                 depth_to_non_terminal[depth] = []
+#             depth_to_non_terminal[depth].append(f"{non_terminal_symbol}_{non_terminal_counter}")
+#             non_terminal_to_depth[f"{non_terminal_symbol}_{non_terminal_counter}"] = depth
+#             if depth != max_depth:
+#                 non_terminal_counter += 1
+#             else:
+#                 break
+
+#     # starting production rule
+#     productions.insert(
+#         0, 
+#         ("S", [f"{non_terminal_symbol}_{non_terminal_counter}"], 1)
+#     )
+            
+
+#     grammar = f"{productions[0][0]} -> {' '.join(productions[0][1])} [{productions[0][2]}]\n"
+#     for production in productions[::-1][:-1]:
+#         grammar += f"{production[0]} -> {' '.join(production[1])} [{production[2]}]\n"
+
+
+#     return grammar
 
 
 

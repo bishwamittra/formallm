@@ -115,23 +115,53 @@ def get_grammar_string(grammar_name):
     
     
 
+    # elif grammar_name.startswith("pcfg"):
+    #     print("Hierarchical CFG")
+    #     grammar_name_split = grammar_name.split("_")
+    #     assert grammar_name_split[1] == "max-depth"
+    #     assert grammar_name_split[3] == "max-breadth"
+    #     assert grammar_name_split[5] == "rules"
+    #     assert grammar_name_split[7] == "skewness"
+    #     assert grammar_name_split[9] in ["alphabet", "alphabet-size"]
+        
+
+    #     max_depth = int(grammar_name_split[2])
+    #     max_breadth = int(grammar_name_split[4])
+    #     production_per_non_terminal = int(grammar_name_split[6])
+    #     skewness = float(grammar_name_split[8])
+    #     if grammar_name_split[9] == "alphabet-size":
+    #         terminals = list(range(int(grammar_name_split[10])))
+    #     else:
+    #         terminals = list(map(str, grammar_name_split[10].split("-")))
+    #     return hierarchical_cfg(max_depth, 
+    #                             max_breadth, 
+    #                             production_per_non_terminal, 
+    #                             skewness,
+    #                             terminals)
+
     elif grammar_name.startswith("pcfg"):
         print("Hierarchical CFG")
         grammar_name_split = grammar_name.split("_")
-        assert grammar_name_split[1] == "max-depth"
-        assert grammar_name_split[3] == "max-breadth"
-        assert grammar_name_split[5] == "rules"
-        assert grammar_name_split[7] == "skewness"
-        assert grammar_name_split[9] == "alphabet"
+        assert grammar_name_split[1] == "depth"
+        assert grammar_name_split[3] == "breadth"
+        assert grammar_name_split[5] == "non-terminals"
+        assert grammar_name_split[7] == "rules"
+        assert grammar_name_split[9] == "skewness"
+        assert grammar_name_split[11] in ["alphabet", "alphabet-size"]
         
 
-        max_depth = int(grammar_name_split[2])
-        max_breadth = int(grammar_name_split[4])
-        production_per_non_terminal = int(grammar_name_split[6])
-        skewness = float(grammar_name_split[8])
-        terminals = list(map(str, grammar_name_split[10].split("-")))
-        return hierarchical_cfg(max_depth, 
-                                max_breadth, 
+        depth = int(grammar_name_split[2])
+        breadth = int(grammar_name_split[4])
+        non_terminals_per_depth = int(grammar_name_split[6])
+        production_per_non_terminal = int(grammar_name_split[8])
+        skewness = float(grammar_name_split[10])
+        if grammar_name_split[11] == "alphabet-size":
+            terminals = list(range(int(grammar_name_split[12])))
+        else:
+            terminals = list(map(str, grammar_name_split[12].split("-")))
+        return hierarchical_cfg(depth, 
+                                breadth,
+                                non_terminals_per_depth,
                                 production_per_non_terminal, 
                                 skewness,
                                 terminals)
@@ -190,7 +220,7 @@ def generate_regular_grammar(
 
     assert min_rule >= 1, "The minimum number of rules must be at least 1."
     assert max_rule >= min_rule, "The maximum number of rules must be at least the minimum number of rules."
-    assert max_breadth >= 2, "The breadth must be at least 1."
+    assert max_breadth >= 2, "The breadth must be at least 2."
     
     # terminals = random.sample(string.ascii_lowercase, num_terminals)
     if is_numerical_terminal:
@@ -325,22 +355,24 @@ def random_sentence_generator(grammar,
     return sequences
 
 
+
+
 def generate_similar_sequences(grammar, 
                                sequences,
-                               sentence_to_non_terminal_applied_position_map, 
+                               sentence_to_non_terminal_applied_position_map,
+                               sequence_to_new_sequence_map,
                                edit_distance, 
                                seed,
                                sampled_sequences=None, 
                                perturb_start_index=0, 
-                               perturb_end_index=100000
-    ):
+                               perturb_end_index=100000,
+                               repeat=1,
+                        ):
     assert perturb_start_index < perturb_end_index
     if isinstance(grammar, PCSG):
         assert sampled_sequences is not None
     
 
-    # grammar parser
-    # grammar_parser = RecursiveDescentParser(grammar)
     grammar_parser = BottomUpLeftCornerChartParser(grammar)
 
     # non-terminal symbols
@@ -353,99 +385,103 @@ def generate_similar_sequences(grammar,
     random_positions = []
     np.random.seed(seed)
     new_sequences = []
-    perturbation = ['delete', 'insert', 'replace']
+    perturbation = ['delete', 'insert', 'replace']        
     perturb_position_dict = {}
     modified_sentence_to_non_terminal_applied_position_map = {}
     match_with_sampled_sequence = 0
-    timeout = 100
+    timeout = 100 * repeat
     start_time = time()
-    for sequence in tqdm(sequences):
-        if time() - start_time > timeout:
-            print("Time out!")
-            break
-        perturb_positions = []
-        new_non_terminal_map = {non_terminal: value.copy() for (non_terminal, value) in sentence_to_non_terminal_applied_position_map[sequence].items()}
-        new_sequence = list(sequence)
-        # print()
-        # print(new_non_terminal_map)
-        for _ in range(edit_distance):
-            if(len(new_sequence) == 0):
+    for _ in tqdm(range(repeat)):
+        for sequence in tqdm(sequences):
+            if sequence not in sequence_to_new_sequence_map:
+                sequence_to_new_sequence_map[sequence] = []
+
+            if time() - start_time > timeout:
+                print("Time out!")
                 break
-            if(len(new_sequence) <= min(perturb_start_index, perturb_end_index)):
-                break
-            action = np.random.choice(perturbation)
-            random_position = np.random.randint(low=min(perturb_start_index, len(new_sequence)), 
-                                                    high=min(perturb_end_index, len(new_sequence)))
-            random_positions.append(random_position)
-            if action == 'delete':
-                if len(new_sequence) > 0:
-                    deleted_terminal = new_sequence[random_position]
-                    del new_sequence[random_position]
-                    for i in range(len(perturb_positions)):
-                        # decrement all positions after the deleted position
-                        if perturb_positions[i][0] > random_position:
-                            perturb_positions[i] = (perturb_positions[i][0] - 1, perturb_positions[i][1], perturb_positions[i][2])
-                    perturb_positions.append((random_position, "delete", deleted_terminal))
-                    for non_terminal in new_non_terminal_map.keys():
-                        deleted_map_index = []
-                        for index, (start_position, end_position, _) in enumerate(new_non_terminal_map[non_terminal]):
-                            if start_position == random_position:
-                                if end_position > random_position:
+            perturb_positions = []
+            new_non_terminal_map = {non_terminal: value.copy() for (non_terminal, value) in sentence_to_non_terminal_applied_position_map[sequence][0].items()}
+            new_sequence = list(sequence)
+            
+            for _ in range(edit_distance):
+                if(len(new_sequence) == 0):
+                    break
+                if(len(new_sequence) <= min(perturb_start_index, perturb_end_index)):
+                    break
+                action = np.random.choice(perturbation)
+                random_position = np.random.randint(low=min(perturb_start_index, 0), 
+                                                        high=min(perturb_end_index, len(new_sequence)))
+                random_positions.append(random_position)
+                if action == 'delete':
+                    if len(new_sequence) > 0:
+                        deleted_terminal = new_sequence[random_position]
+                        del new_sequence[random_position]
+                        for i in range(len(perturb_positions)):
+                            # decrement all positions after the deleted position
+                            if perturb_positions[i][0] > random_position:
+                                perturb_positions[i] = (perturb_positions[i][0] - 1, perturb_positions[i][1], perturb_positions[i][2])
+                        perturb_positions.append((random_position, "delete", deleted_terminal))
+                        for non_terminal in new_non_terminal_map.keys():
+                            deleted_map_index = []
+                            for index, (start_position, end_position, _) in enumerate(new_non_terminal_map[non_terminal]):
+                                if start_position == random_position:
+                                    if end_position > random_position:
+                                        new_non_terminal_map[non_terminal][index] = (start_position, end_position - 1, _)
+                                    else:
+                                        deleted_map_index.append(index)
+                                elif start_position > random_position:
+                                    new_non_terminal_map[non_terminal][index] = (start_position - 1, end_position - 1, _)
+                                elif end_position >= random_position:
                                     new_non_terminal_map[non_terminal][index] = (start_position, end_position - 1, _)
                                 else:
-                                    deleted_map_index.append(index)
+                                    pass
+                            for index in deleted_map_index:
+                                del new_non_terminal_map[non_terminal][index]
+                elif action == 'insert':
+                    new_sequence.insert(random_position, np.random.choice(terminals))
+                    for i in range(len(perturb_positions)):
+                        # increment all positions after the inserted position
+                        if perturb_positions[i][0] > random_position:
+                            perturb_positions[i] = (perturb_positions[i][0] + 1, perturb_positions[i][1], perturb_positions[i][2])
+                    perturb_positions.append((random_position, "insert", new_sequence[random_position]))
+                    for non_terminal in new_non_terminal_map.keys():
+                        for index, (start_position, end_position, _) in enumerate(new_non_terminal_map[non_terminal]):
+                            if start_position == random_position:
+                                new_non_terminal_map[non_terminal][index] = (start_position, end_position + 1, _)                        
                             elif start_position > random_position:
-                                new_non_terminal_map[non_terminal][index] = (start_position - 1, end_position - 1, _)
+                                new_non_terminal_map[non_terminal][index] = (start_position + 1, end_position + 1, _)
                             elif end_position >= random_position:
-                                new_non_terminal_map[non_terminal][index] = (start_position, end_position - 1, _)
+                                new_non_terminal_map[non_terminal][index] = (start_position, end_position + 1, _)
                             else:
                                 pass
-                        for index in deleted_map_index:
-                            del new_non_terminal_map[non_terminal][index]
-            elif action == 'insert':
-                new_sequence.insert(random_position, np.random.choice(terminals))
-                for i in range(len(perturb_positions)):
-                    # increment all positions after the inserted position
-                    if perturb_positions[i][0] > random_position:
-                        perturb_positions[i] = (perturb_positions[i][0] + 1, perturb_positions[i][1], perturb_positions[i][2])
-                perturb_positions.append((random_position, "insert", new_sequence[random_position]))
-                for non_terminal in new_non_terminal_map.keys():
-                    for index, (start_position, end_position, _) in enumerate(new_non_terminal_map[non_terminal]):
-                        if start_position == random_position:
-                            new_non_terminal_map[non_terminal][index] = (start_position, end_position + 1, _)                        
-                        elif start_position > random_position:
-                            new_non_terminal_map[non_terminal][index] = (start_position + 1, end_position + 1, _)
-                        elif end_position >= random_position:
-                            new_non_terminal_map[non_terminal][index] = (start_position, end_position + 1, _)
-                        else:
-                            pass
-            else:
-                if len(new_sequence) > 0:
-                    perturb_positions.append((random_position, "replace", new_sequence[random_position])) # store earlier value
-                    new_sequence[random_position] = np.random.choice(terminals_dict_wo[new_sequence[random_position]])
-        
-        # drop empty sequences and sequences that are accepted by the grammar
-        if(len(new_sequence) > 0 and isinstance(grammar, PCSG)):
-            if tuple(new_sequence) not in sampled_sequences:
+                else:
+                    if len(new_sequence) > 0:
+                        perturb_positions.append((random_position, "replace", new_sequence[random_position])) # store earlier value
+                        new_sequence[random_position] = np.random.choice(terminals_dict_wo[new_sequence[random_position]])
+            
+            # drop empty sequences and sequences that are accepted by the grammar
+            if(len(new_sequence) > 0 and isinstance(grammar, PCSG)):
+                if tuple(new_sequence) not in sampled_sequences:
+                    new_sequences.append(tuple(new_sequence))
+                    perturb_position_dict[tuple(new_sequence)] = tuple(perturb_positions)
+                    modified_sentence_to_non_terminal_applied_position_map[tuple(new_sequence)] = [new_non_terminal_map]
+                else:
+                    # print("Sequence already sampled", tuple(new_sequence))
+                    match_with_sampled_sequence += 1
+
+            elif(len(new_sequence) > 0 and not check_sequence_exists(grammar_parser, new_sequence)):
+                # print(new_non_terminal_map)
                 new_sequences.append(tuple(new_sequence))
                 perturb_position_dict[tuple(new_sequence)] = tuple(perturb_positions)
-                modified_sentence_to_non_terminal_applied_position_map[tuple(new_sequence)] = new_non_terminal_map
-            else:
-                # print("Sequence already sampled", tuple(new_sequence))
-                match_with_sampled_sequence += 1
-
-        elif(len(new_sequence) > 0 and not check_sequence_exists(grammar_parser, new_sequence)):
-            # print(new_non_terminal_map)
-            new_sequences.append(tuple(new_sequence))
-            perturb_position_dict[tuple(new_sequence)] = tuple(perturb_positions)
-            modified_sentence_to_non_terminal_applied_position_map[tuple(new_sequence)] = new_non_terminal_map
+                modified_sentence_to_non_terminal_applied_position_map[tuple(new_sequence)] = [new_non_terminal_map]
+                sequence_to_new_sequence_map[tuple(sequence)].append(tuple(new_sequence))
     
     
     temp_sentence_to_non_terminal_applied_position_map = None
     random_positions = np.array(random_positions)
     print(random_positions.mean(), random_positions.std())
     print(f"Match with sampled sequence: {match_with_sampled_sequence}")
-    return new_sequences, perturb_position_dict, modified_sentence_to_non_terminal_applied_position_map
+    return new_sequences, perturb_position_dict, modified_sentence_to_non_terminal_applied_position_map, sequence_to_new_sequence_map
 
 
 def get_subgrammar_string(grammar_string, 
@@ -489,7 +525,73 @@ def refine_non_terminal_applied_position(non_terminal_position_map):
         # print(keep)
         # print()
         new_non_terminal_position_map[non_terminal] = [non_terminal_position_map[non_terminal][i] for i in range(len_non_terminal_position_map) if keep[i]]
-    return new_non_terminal_position_map            
+    return new_non_terminal_position_map
+
+def refine_non_terminal_applied_position_reverse(non_terminal_position_map_reverse):
+    def merge_consecutive_intervals(intervals):
+        if not intervals:
+            return []
+
+        # Ensure intervals are sorted
+        intervals = sorted(intervals, key=lambda x: x[0])
+
+        merged = []
+        current_start, current_end = intervals[0]
+
+        for start, end in intervals[1:]:
+            if current_end + 1 >= start:
+                current_end = end
+            else:
+                merged.append((current_start, current_end))
+                current_start, current_end = start, end
+
+        merged.append((current_start, current_end))
+        return merged
+    
+    for non_terminal in non_terminal_position_map_reverse.keys():
+        non_terminal_position_map_reverse[non_terminal] = merge_consecutive_intervals(non_terminal_position_map_reverse[non_terminal])
+    return non_terminal_position_map_reverse            
+
+# def get_grammatical_sentences(grammar, 
+#                               num_samples, 
+#                               seed):
+#     """
+#     Generates grammatically correct sentences using a given grammar.
+
+#     Args:
+#         grammar (Grammar): The grammar to use for generating sentences.
+#         num_samples (int): The number of sentences to generate.
+#         seed (int): The random seed to use for generating sentences.
+
+#     Returns:
+#         List[Tuple[str]]: A list of tuples, where each tuple represents a sentence.
+#     """
+#     sentence_prob_dict = {}
+#     sentence_freq = {}
+#     sentence_to_non_terminal_applied_position_map = {}
+#     sentences = []
+#     warning_printed = False
+#     num_samples_effective = 1 * num_samples
+#     for (sentence, prob), non_terminal_applied_position in tqdm(grammar.generate(num_samples_effective, seed=seed), disable=False):
+#         sentence = tuple(sentence)
+#         if(sentence not in sentence_prob_dict):
+#             sentence_prob_dict[sentence] = prob
+#             sentence_to_non_terminal_applied_position_map[sentence] = refine_non_terminal_applied_position(non_terminal_applied_position) 
+#         else:
+#             if not np.isclose(sentence_prob_dict[sentence], prob):
+#                 # ambiguous grammar. A loose comparison is used here
+#                 if not warning_printed:
+#                     print(f"Found sentences with different probabilities! {sentence_prob_dict[sentence]} vs {prob}")
+#                     warning_printed = True
+#                 sentence_prob_dict[sentence] += prob
+
+#         if(sentence not in sentence_freq):
+#             sentence_freq[sentence] = 1
+#         else:
+#             sentence_freq[sentence] += 1
+#         sentences.append(sentence)
+
+#     return sentences, sentence_to_non_terminal_applied_position_map, sentence_freq, sentence_prob_dict
 
 def get_grammatical_sentences(grammar, 
                               num_samples, 
@@ -508,21 +610,25 @@ def get_grammatical_sentences(grammar,
     sentence_prob_dict = {}
     sentence_freq = {}
     sentence_to_non_terminal_applied_position_map = {}
+    sentence_to_non_terminal_applied_position_map_reverse = {}
     sentences = []
     warning_printed = False
     num_samples_effective = 1 * num_samples
-    for (sentence, prob), non_terminal_applied_position in tqdm(grammar.generate(num_samples_effective, seed=seed), disable=False):
+    for (sentence, prob), non_terminal_applied_position, non_terminal_applied_position_reverse in tqdm(grammar.generate(num_samples_effective, seed=seed), disable=False):
         sentence = tuple(sentence)
+        non_terminal_applied_position = refine_non_terminal_applied_position(non_terminal_applied_position)
+        non_terminal_applied_position_reverse = refine_non_terminal_applied_position_reverse(non_terminal_applied_position_reverse)
+
         if(sentence not in sentence_prob_dict):
             sentence_prob_dict[sentence] = prob
-            sentence_to_non_terminal_applied_position_map[sentence] = refine_non_terminal_applied_position(non_terminal_applied_position) 
-        else:
-            if not np.isclose(sentence_prob_dict[sentence], prob):
-                # ambiguous grammar. A loose comparison is used here
-                if not warning_printed:
-                    print(f"Found sentences with different probabilities! {sentence_prob_dict[sentence]} vs {prob}")
-                    warning_printed = True
+            sentence_to_non_terminal_applied_position_map[sentence] = [non_terminal_applied_position] 
+            sentence_to_non_terminal_applied_position_map_reverse[sentence] = [non_terminal_applied_position_reverse]
+        
+        elif non_terminal_applied_position not in sentence_to_non_terminal_applied_position_map[sentence]:
                 sentence_prob_dict[sentence] += prob
+                sentence_to_non_terminal_applied_position_map[sentence].append(non_terminal_applied_position)
+                sentence_to_non_terminal_applied_position_map_reverse[sentence].append(non_terminal_applied_position_reverse)           
+                
 
         if(sentence not in sentence_freq):
             sentence_freq[sentence] = 1
@@ -530,7 +636,8 @@ def get_grammatical_sentences(grammar,
             sentence_freq[sentence] += 1
         sentences.append(sentence)
 
-    return sentences, sentence_to_non_terminal_applied_position_map, sentence_freq, sentence_prob_dict
+    return sentences, sentence_to_non_terminal_applied_position_map, sentence_freq, sentence_prob_dict, sentence_to_non_terminal_applied_position_map_reverse
+
 
 
 def get_nongrammatical_sentences_from_perturbed_grammar(base_grammar,
@@ -552,7 +659,7 @@ def get_nongrammatical_sentences_from_perturbed_grammar(base_grammar,
     sentences = []
     num_samples_effective = 5 * num_samples
     found_samples = 0
-    for (sentence, prob), non_terminal_applied_position in tqdm(perturbed_grammar.generate(num_samples_effective, seed=seed), disable=False):
+    for (sentence, prob), non_terminal_applied_position, _ in tqdm(perturbed_grammar.generate(num_samples_effective, seed=seed), disable=False):
         if check_sequence_exists(base_grammar_parser, sentence): # if the sentence is grammatical, skip
             continue
         found_samples += 1
@@ -681,41 +788,60 @@ def get_grammar_variables(grammar, grammar_name):
                 nonterminal_to_level[nonterminal] = level
                 if level not in level_to_nonterminals:
                     level_to_nonterminals[level] = []
-                level_to_nonterminals[level].append(nonterminal)
+                if nonterminal not in level_to_nonterminals[level]:
+                    level_to_nonterminals[level].append(nonterminal)
             else:
                 nonterminal_to_level[nonterminal] = -100
     # assert 0 not in level_to_nonterminals
     level_to_nonterminals[0] = terminals
     return terminals, nonterminals, nonterminal_to_level, level_to_nonterminals
 
-def get_perturbed_grammar_string(grammar_working, perturbation_result):
+def get_perturbed_grammar_string(grammar_working, perturbation_result, guided=False):
     grammar_string_modified = []
-    for production in grammar_working.productions():
-        if(production.lhs() == perturbation_result["nonterminal"]):
-            continue
-        else:
-            grammar_string_modified.append(" ".join([
-                production.lhs().symbol(),
-                "->",
-                " ".join([elem.symbol() if isinstance(elem, Nonterminal) else f"'{elem}'" for elem in production.rhs()]),
-                f"[{production.prob()}]"
-            ]))
-    for i, production in enumerate(grammar_working.productions(perturbation_result["nonterminal"])):
-        if i == perturbation_result["expansion_rule_index"]:
-            grammar_string_modified.append(" ".join([
-                production.lhs().symbol(),
-                "->",
-                " ".join([elem.symbol() if isinstance(elem, Nonterminal) else f"'{elem}'" for elem in perturbation_result['expansion_rule']]),
-                f"[{production.prob()}]"
-            ]))
-        else:
-            grammar_string_modified.append(" ".join([
-                production.lhs().symbol(),
-                "->",
-                " ".join([elem.symbol() if isinstance(elem, Nonterminal) else f"'{elem}'" for elem in production.rhs()]),
-                f"[{production.prob()}]"
-            ]))
+    if not guided:
+        for production in grammar_working.productions():
+            if(production.lhs() == perturbation_result["nonterminal"]):
+                continue
+            else:
+                grammar_string_modified.append(" ".join([
+                    production.lhs().symbol(),
+                    "->",
+                    " ".join([elem.symbol() if isinstance(elem, Nonterminal) else f"'{elem}'" for elem in production.rhs()]),
+                    f"[{production.prob()}]"
+                ]))
+        for i, production in enumerate(grammar_working.productions(perturbation_result["nonterminal"])):
+            if i == perturbation_result["expansion_rule_index"]:
+                grammar_string_modified.append(" ".join([
+                    production.lhs().symbol(),
+                    "->",
+                    " ".join([elem.symbol() if isinstance(elem, Nonterminal) else f"'{elem}'" for elem in perturbation_result['expansion_rule']]),
+                    f"[{production.prob()}]"
+                ]))
+            else:
+                grammar_string_modified.append(" ".join([
+                    production.lhs().symbol(),
+                    "->",
+                    " ".join([elem.symbol() if isinstance(elem, Nonterminal) else f"'{elem}'" for elem in production.rhs()]),
+                    f"[{production.prob()}]"
+                ]))
+    else:
+        for i, production in enumerate(grammar_working.productions()):
+            if i == perturbation_result["expansion_rule_index"]:
+                grammar_string_modified.append(" ".join([
+                    production.lhs().symbol(),
+                    "->",
+                    " ".join([elem.symbol() if isinstance(elem, Nonterminal) else f"'{elem}'" for elem in perturbation_result['expansion_rule']]),
+                    f"[{production.prob()}]"
+                ]))
+            else:
+                grammar_string_modified.append(" ".join([
+                    production.lhs().symbol(),
+                    "->",
+                    " ".join([elem.symbol() if isinstance(elem, Nonterminal) else f"'{elem}'" for elem in production.rhs()]),
+                    f"[{production.prob()}]"
+                ]))
 
+    # print("\n".join(grammar_string_modified))
     return PCFG.fromstring("\n".join(grammar_string_modified))
 
 def get_perturbed_grammar(grammar, 
@@ -826,7 +952,7 @@ def get_perturbed_grammar(grammar,
                 if verbose:
                     print(f"update next perturbation position: {result[applied_nonterminal][expansion_rule_index][i][0]} => {result[applied_nonterminal][expansion_rule_index][i][0]+1}")
             elif action == "delete" and result[applied_nonterminal][expansion_rule_index][i][0] >= random_position:
-                result[applied_nonterminal][expansion_rule_index][i] = (min(result[applied_nonterminal][expansion_rule_index][i][0]-1, 0),
+                result[applied_nonterminal][expansion_rule_index][i] = (max(result[applied_nonterminal][expansion_rule_index][i][0]-1, 0),
                                                                     result[applied_nonterminal][expansion_rule_index][i][1],
                                                                     result[applied_nonterminal][expansion_rule_index][i][2])
                 if verbose:
@@ -834,7 +960,144 @@ def get_perturbed_grammar(grammar,
 
         if action == "delete" and random_position >= len(expansion_rule):
             result[applied_nonterminal][expansion_rule_index].append((len(expansion_rule)-1, action, old_nonterminal))
-        else:      
+        else:
+            result[applied_nonterminal][expansion_rule_index].append((random_position, action, old_nonterminal))
+
+        # print(grammar_working)
+        if verbose:
+            print(perturbation_result)
+            print()
+
+    # print(result)
+    # print(grammar_working)
+    return grammar_working, result
+
+
+
+
+def get_perturbed_grammar_guided(grammar, 
+                          grammar_name, 
+                          seed=0,
+                          rule_index=1,
+                          edit=1,
+                          forced_action=None, 
+                          verbose=False):
+    assert forced_action in ["replace", "insert", "delete", None]
+    terminals, nonterminals, nonterminal_to_level, level_to_nonterminals = get_grammar_variables(grammar, grammar_name)
+    if verbose:
+        print(f"Terminals: {terminals}")
+        print(f"Nonterminals: {nonterminals}")
+        print(f"Nonterminal to level: {nonterminal_to_level}")
+        print(f"Level to nonterminals: {level_to_nonterminals}")
+    assert edit > 0
+    assert rule_index < len(grammar.productions())
+    assert rule_index > 0
+    assert len(grammar.productions()) > 1
+    expansion_rule_index = rule_index
+
+    # print(seed)
+    np.random.seed(seed)
+    grammar_working = deepcopy(grammar)
+    result = {}
+    for _ in range(edit):
+        applied_nonterminal = list(grammar_working.productions())[rule_index].lhs()
+        level = nonterminal_to_level[applied_nonterminal]
+        choice_nonterminals = level_to_nonterminals[level-1]
+        nonterminals_dict_wo = {}
+        for nonterminal in choice_nonterminals:
+            # all nonterminals except the current terminal
+            nonterminals_dict_wo[nonterminal] = [t for t in choice_nonterminals if t != nonterminal]
+
+        expansion_rule = list(grammar_working.productions()[expansion_rule_index].rhs())
+
+        if verbose:
+            print(f"Random nonterminal: {applied_nonterminal}")
+            print(f"Choices: {choice_nonterminals}")
+            print(f"Expansion rule index: {expansion_rule_index}")   
+            print(f"Expansion rule: {expansion_rule}")
+            print(f"Nonterminals without current: {nonterminals_dict_wo}")
+
+        if verbose:
+            print(f"Expansion rule before: {expansion_rule}. Index {expansion_rule_index}")
+        if len(expansion_rule) == 1:
+            random_position = 0
+        else:
+            random_position = np.random.randint(0, len(expansion_rule))
+        if(forced_action is None):
+            if(len(expansion_rule) > 1):
+                action = np.random.choice(["replace", 'insert', "delete"])
+            else:
+                action = np.random.choice(['insert', "replace"])
+        else:
+            action = forced_action
+        old_nonterminal = expansion_rule[random_position] if action != 'insert' else None
+        if(action == "insert"):
+            expansion_rule.insert(
+                random_position, np.random.choice(choice_nonterminals)
+            )
+        elif(action == "delete"):
+            if(len(expansion_rule) > 1):
+                expansion_rule.pop(random_position)
+            else:
+                print("Cannot delete last element")
+                continue
+        elif(action == "replace"):
+            replaced_nonterminal = np.random.choice(nonterminals_dict_wo[expansion_rule[random_position]])
+            expansion_rule[random_position] = replaced_nonterminal
+        # print(f"Expansion rule after: {expansion_rule}")
+        if verbose:
+            print(f"action: {action} at position {random_position}")
+        
+
+        perturbation_result = {
+            "nonterminal": applied_nonterminal,
+            "expansion_rule_index": expansion_rule_index,
+            "action": action,
+            "position": random_position,
+            "expansion_rule": expansion_rule
+        }
+
+        
+
+
+        # update
+        grammar_working = get_perturbed_grammar_string(grammar_working, perturbation_result, guided=True)
+
+        # revise expansion rule index, which may change due to new string import
+        at_least_one = False
+        for i, production in enumerate(grammar_working.productions()):
+            if tuple(expansion_rule) == production.rhs():
+                expansion_rule_index = i
+                at_least_one = True
+                break
+        assert at_least_one
+        if verbose:
+            print("Updated expansion rule index: ", expansion_rule_index)
+        perturbation_result["expansion_rule_index"] = expansion_rule_index
+
+        if(applied_nonterminal not in result):
+            result[applied_nonterminal] = {}
+        if(expansion_rule_index not in result[applied_nonterminal]):
+            result[applied_nonterminal][expansion_rule_index] = []
+
+        # update position of previous perturbations in case of insert and delete
+        for i in range(len(result[applied_nonterminal][expansion_rule_index])):
+            if action == "insert" and result[applied_nonterminal][expansion_rule_index][i][0] >= random_position:
+                result[applied_nonterminal][expansion_rule_index][i] = (max(result[applied_nonterminal][expansion_rule_index][i][0]+1, len(expansion_rule)-1),
+                                                                    result[applied_nonterminal][expansion_rule_index][i][1],
+                                                                    result[applied_nonterminal][expansion_rule_index][i][2])
+                if verbose:
+                    print(f"update next perturbation position: {result[applied_nonterminal][expansion_rule_index][i][0]} => {result[applied_nonterminal][expansion_rule_index][i][0]+1}")
+            elif action == "delete" and result[applied_nonterminal][expansion_rule_index][i][0] >= random_position:
+                result[applied_nonterminal][expansion_rule_index][i] = (max(result[applied_nonterminal][expansion_rule_index][i][0]-1, 0),
+                                                                    result[applied_nonterminal][expansion_rule_index][i][1],
+                                                                    result[applied_nonterminal][expansion_rule_index][i][2])
+                if verbose:
+                    print(f"update next perturbation position: {result[applied_nonterminal][expansion_rule_index][i][0]} => {result[applied_nonterminal][expansion_rule_index][i][0]-1}")
+
+        if action == "delete" and random_position >= len(expansion_rule):
+            result[applied_nonterminal][expansion_rule_index].append((len(expansion_rule)-1, action, old_nonterminal))
+        else:
             result[applied_nonterminal][expansion_rule_index].append((random_position, action, old_nonterminal))
 
         # print(grammar_working)
@@ -893,3 +1156,31 @@ def to_latex_equation(grammar_string, color_dict=None, script_notation="_"):
     latex_string.append("\\end{align*}")
     
     print("\n".join(latex_string))
+
+
+
+
+def find_sentences_applied_by_a_rule(grammar, global_rule_index, sequences, sequence_to_non_terminal_applied_position_map_reverse):
+    relevant_sequences = []
+
+    print(grammar.productions()[global_rule_index])
+    non_terminal = grammar.productions()[global_rule_index].lhs()
+    # print(non_terminal)
+    # print(grammar.productions()[global_rule_index].rhs())
+
+    local_rule_index = None
+    for i, production in enumerate(grammar._lhs_index[non_terminal]):
+        if production.rhs() == grammar.productions()[global_rule_index].rhs():
+            local_rule_index = i
+            break
+    # print(local_rule_index)
+    # print(non_terminal, local_rule_index)
+    for i, sentence in enumerate(sequences):
+        relevant_positions = []
+        for j, non_terminal_map_reverse in enumerate(sequence_to_non_terminal_applied_position_map_reverse[sentence]):
+            if (non_terminal, local_rule_index) in non_terminal_map_reverse:
+                relevant_positions.append((j, non_terminal_map_reverse[(non_terminal, local_rule_index)]))
+        if len(relevant_positions) > 0:
+            relevant_sequences.append((sentence, relevant_positions))
+    print(f"Number of relevant sequences: {len(relevant_sequences)}")
+    return relevant_sequences

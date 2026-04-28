@@ -88,7 +88,6 @@ def line(error_y_mode=None, **kwargs):
         fig.data = tuple(reordered_data)
     return fig
 
-import scipy.stats
 def mean_std_df(df, group_columns, columns_to_agg):
     xdf = df.groupby(group_columns).agg({column : ['mean', 'std'] for column in columns_to_agg})
     xdf.columns = xdf.columns.map("_".join)
@@ -178,7 +177,7 @@ def nice_plot_multi_columns(
     df_mean = mean_std_df(df_melt, [x_axis, legend_title], ['value'])
 
     category_orders={
-                    legend_title: [legend_names[y_axis] for y_axis in y_axis_list]
+                    legend_title: modifed_y_axis_list if group_by is not None else [legend_names[y_axis] for y_axis in y_axis_list]
     } if enforce_legend_order else None
     if(plot_type == 'line'):
         fig = line(data_frame = df_mean,
@@ -375,48 +374,48 @@ def nice_plot(
 
 
 
-def bar_plot_for_multi_columns(
-        df,
-        x_axis='epoch',
-        y_axiss = ['train_loss', 'val_loss'],
-        x_axis_title = 'Epoch',
-        y_axis_title = 'Loss',
-        legend_title = 'Loss',
-        legend_names={
-            'train_loss': 'Train',
-            'val_loss': 'Validation'
-        }
-    ):
-    
-    for y_axis in y_axiss:
-        assert y_axis in df.columns
-        assert y_axis in legend_names.keys()
-    assert len(y_axiss) == len(legend_names)
-
-
-    df_melt = df.melt(id_vars=[x_axis], 
-                    value_vars=y_axiss, 
-                    value_name='value',
-                    var_name=legend_title)
-    
-    df_melt[legend_title] = df_melt[legend_title].map(legend_names)
-    df_mean = mean_std_df(df_melt, [x_axis, legend_title], ['value'])
-
-    fig = px.bar(df_mean, x=x_axis, y='value_mean', color=legend_title, error_y='value_std')
-    
-    fig.update_layout(
-            xaxis_title=x_axis_title,
-            yaxis_title=y_axis_title,
-            font=dict(
-                # family="Courier New, monospace",
-                size=18,
-                # color="RebeccaPurple"
-            ),
-            width=800,
-            height=400,
-            # hovermode="x"
-        )
-    return fig
+# def bar_plot_for_multi_columns(
+#         df,
+#         x_axis='epoch',
+#         y_axiss = ['train_loss', 'val_loss'],
+#         x_axis_title = 'Epoch',
+#         y_axis_title = 'Loss',
+#         legend_title = 'Loss',
+#         legend_names={
+#             'train_loss': 'Train',
+#             'val_loss': 'Validation'
+#         }
+#     ):
+#
+#     for y_axis in y_axiss:
+#         assert y_axis in df.columns
+#         assert y_axis in legend_names.keys()
+#     assert len(y_axiss) == len(legend_names)
+#
+#
+#     df_melt = df.melt(id_vars=[x_axis],
+#                     value_vars=y_axiss,
+#                     value_name='value',
+#                     var_name=legend_title)
+#
+#     df_melt[legend_title] = df_melt[legend_title].map(legend_names)
+#     df_mean = mean_std_df(df_melt, [x_axis, legend_title], ['value'])
+#
+#     fig = px.bar(df_mean, x=x_axis, y='value_mean', color=legend_title, error_y='value_std')
+#
+#     fig.update_layout(
+#             xaxis_title=x_axis_title,
+#             yaxis_title=y_axis_title,
+#             font=dict(
+#                 # family="Courier New, monospace",
+#                 size=18,
+#                 # color="RebeccaPurple"
+#             ),
+#             width=800,
+#             height=400,
+#             # hovermode="x"
+#         )
+#     return fig
 
 
 def save_image_template(fig, 
@@ -438,7 +437,6 @@ def save_image_template(fig,
                      height=height,
                      title=title,
                      title_font_size=title_font_size,
-                     margin=dict(l=5, r=5, b=5, t=5),
                      legend=dict(
                         entrywidth=legend_entrywidth,
                         orientation=legend_orientation,
@@ -455,7 +453,10 @@ def save_image_template(fig,
                         # borderwidth=2,
                      ),
                      plot_bgcolor="white",
-    )  
+    )
+    if title is None:
+        fig.update_layout(margin=dict(l=5, r=5, b=5, t=5))  
+        
     # fig.update_traces(marker_size=1)
     fig.update_xaxes(
         mirror=True,
@@ -551,11 +552,11 @@ def nice_scatter_plot(
                 if elem not in group_names:
                     continue
                 elem = group_names[elem] # renamed
-                if elem not in df_mean[group_by].unique():
+                if elem not in df[group_by].unique():
                     continue
                 color_discrete_map[elem] = color
 
-        for elem in df_mean[group_by].unique():
+        for elem in df[group_by].unique():
             if elem not in color_discrete_map:
                 color_discrete_map[elem] = next(color_pool)
 
@@ -608,7 +609,10 @@ class Report():
     def __init__(self, filename, delete_existing=False):
         self.filename = filename
         if delete_existing:
-            os.system(f"rm -f {self.filename}")
+            try:
+                os.remove(self.filename)
+            except FileNotFoundError:
+                pass
     
     def write(self, obj, append=True, add_new_line=True, replace_with_line_break=True, print_obj=True):
         with open(self.filename, 'a' if append else 'w') as f:
