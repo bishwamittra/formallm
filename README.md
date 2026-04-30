@@ -5,9 +5,9 @@ Corresponding paper:
 <p align="center"><img src="illustrations/ft_vs_icl.jpg" width="60%" alt="LLMs learn in two modes. Which one is more language proficient?"></p>
 
 
-- Bishwamittra Ghosh, Soumi Das, Qinyuan Wu, Mohammad Aflah Khan, Krishna P Gummadi, Evimaria Terzi, and Deepak Garg. **Understanding the Interplay between Memorization and Learning in LLMs**. In Submission, 2026.
+<!-- - Bishwamittra Ghosh, Soumi Das, Qinyuan Wu, Mohammad Aflah Khan, Krishna P Gummadi, Evimaria Terzi, and Deepak Garg. **Understanding the Interplay between Memorization and Learning in LLMs**. In Submission, 2026.
 
-<p align="center"><img src="illustrations/memorization_measures.png" width="60%" alt="Contextual memorization disentangles between contextual learning and memorization, and connects learning-based memorization measures to privacy-based memorization measures."></p>
+<p align="center"><img src="illustrations/memorization_measures.png" width="60%" alt="Contextual memorization disentangles between contextual learning and memorization, and connects learning-based memorization measures to privacy-based memorization measures."></p> -->
 
 
 ## Installation
